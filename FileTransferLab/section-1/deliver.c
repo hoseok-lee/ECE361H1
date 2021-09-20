@@ -27,16 +27,17 @@ int main(int argc, char const *argv[]){
 	char buf[BUF_SIZE] = {0};
 	char filename[BUF_SIZE] = {0};
 	
+    printf("Enter a filename in the format: ftp <file name>");
 	fgets(buf, BUF_SIZE, stdin);
 	
-	int cursor = 0;
-	while(buf[cursor] == ' '){
-		cursor++;
+	int i = 0;
+	while(buf[i] == ' '){
+		i++;
 	}
-	if(tolower(buf[cursor]) == 'f' && tolower(buf[cursor + 1]) == 't' && tolower(buf[cursor + 2]) == 'p'){
-		cursor += 3;
-	while (buf[cursor] == ' '){ 
-		cursor++;
+	if(buf[i] == 'f' && buf[i + 1] == 't' && buf[i + 2] == 'p'){
+		i += 3;
+	while (buf[i] == ' '){ 
+		i++;
 	}
 	char *token = strtok(buf + cursor, "\r\t\n ");
 	strncpy(filename, token, BUF_SIZE);
@@ -46,16 +47,16 @@ int main(int argc, char const *argv[]){
 		printf("File \"%s\" doesn't exist.\n", filename);
 	}
 	
-	int numbytes;
-	// send the message
-	if ((numbytes = sendto(sockfd, "ftp", strlen("ftp") , 0 , (struct sockaddr *) &serv_addr, sizeof(serv_addr))) == -1){
+	int bytes = sendto(sockfd, "ftp", strlen("ftp"), 0, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+	if (bytes == -1){
 		printf("Sending error\n");
 	}
 	
 	memset(buf, 0, BUF_SIZE); 
 	socklen_t serv_addr_size = sizeof(serv_addr);
-	if((numbytes = recvfrom(sockfd, buf, BUF_SIZE, 0, (struct sockaddr *) &serv_addr, &serv_addr_size)) == -1){
-		printf(stderr, "Receiving error\n");
+    bytes = recvfrom(sockfd, buf, BUF_SIZE, 0, (struct sockaddr *) &serv_addr, &serv_addr_size))
+	if(bytes == -1){
+		printf("Receiving error\n");
 	}
 	
 	if(strcmp(buf, "yes") == 0){
