@@ -15,19 +15,19 @@
 
 int main (int argc, char **argv)
 {
-    int sockfd;
+    int sockfd, port;
     struct addrinfo hints, *servinfo, *p;
     int yes = 1;
     int rv, numbytes;
     struct sockaddr_in serv_addr, their_addr;
     socklen_t addr_len;
     char buf[MAXBUFLEN];
-    int port;
 
 
 
+    // server <UDP listen port>
     if (argc != 2) {
-        return 1;
+        exit(0);
     }
 
     port = atoi(argv[1]);
@@ -46,7 +46,7 @@ int main (int argc, char **argv)
 
     // Generate socket descriptor for binding
     // sockfd is the socket file descriptor
-    if ((sockfd = socket(hints.ai_family, hints.ai_socktype, hints.ai_protocol)) ==  -1)
+    if ((sockfd = socket(hints.ai_family, hints.ai_socktype, hints.ai_protocol)) == -1)
     {
         perror("listener: socket");
         exit(1);
