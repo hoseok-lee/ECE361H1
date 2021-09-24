@@ -10,6 +10,8 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <ctype.h>
+#include <time.h>
 
 #define MAXBUFLEN 100
 	
@@ -79,6 +81,11 @@ int main (int argc, char **argv)
 		printf("File \"%s\" doesn't exist.\n", filename);
         exit(1);
 	}
+
+    // Measure the round-trip time from the client to the server
+    // Start the timer
+    clock_t start_time, end_time;
+    start_time = clock();
 	
     // Send message to server
     char *message = "ftp";
@@ -95,6 +102,10 @@ int main (int argc, char **argv)
 		perror("talker: recvfrom");
         exit(1);
 	}
+
+    // End the timer
+    end_time = clock();
+    printf("Total round-trip time: %d seconds\n", (double) (end_time - start_time));
 	
     // File transfer can start once acknowledgement message has been sent
 	if (strcmp(buf, "yes") == 0)
