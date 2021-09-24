@@ -1,22 +1,11 @@
-CC=gcc
-CFLAGS=-c
-SRCS=server.c deliver.c
-OBJS=$(SRCS:.c=.o)
-EXES=$(SRCS:.c=)
+SUBDIRS = server deliver
 
-all: $(EXES)
-
-server: server.o
-	$(CC) $^ -o $@
-
-deliver: deliver.o
-	$(CC) $^ -o $@
-
-$(OBJS):$(SRCS)
-	$(CC) $(CFLAGS) $(SRCS)
+all:
+	@for dir in $(SUBDIRS); do \
+		$(MAKE) -C $$dir; \
+	done;
 
 clean:
-	rm -f $(OBJS) $(EXES)
-
-print:
-	echo $(EXES)
+	@for dir in $(SUBDIRS); do\
+		$(MAKE) -C $$dir clean; \
+	done;
