@@ -105,7 +105,7 @@ int main (int argc, char **argv)
 
     // End the timer
     end = clock();
-    printf("Total round-trip time: %e milliseconds\n", (((double) (end - begin)) / CLOCKS_PER_SEC) * 1000);
+    printf("Total round-trip time: %g milliseconds\n", (((double) (end - begin)) / CLOCKS_PER_SEC) * 1000);
 	
     // File transfer can start once acknowledgement message has been sent
 	if (strcmp(buf, "yes") == 0)
