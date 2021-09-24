@@ -84,8 +84,8 @@ int main (int argc, char **argv)
 
     // Measure the round-trip time from the client to the server
     // Start the timer
-    clock_t begin_time, end_time;
-    begin_time = clock();
+    clock_t start, end;
+    start = clock();
 	
     // Send message to server
     char *message = "ftp";
@@ -104,8 +104,8 @@ int main (int argc, char **argv)
 	}
 
     // End the timer
-    end_time = clock();
-    printf("Total round-trip time: %d seconds\n", (double) difftime(end_time, begin_time));
+    end = clock();
+    printf("Total round-trip time: %d seconds\n", ((double) (end - start)) / CLOCKS_PER_SEC);
 	
     // File transfer can start once acknowledgement message has been sent
 	if (strcmp(buf, "yes") == 0)
