@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,15 +14,18 @@
 #include <ctype.h>
 #include <time.h>
 
-#define MAXBUFLEN 100
+// Packet
+#include "../packet.h"
 
-int main (int argc, char **argv)
+int main (int argc, char ** argv)
 {
-    int sockfd, numbytes;
-    struct addrinfo hints, *servinfo, *p;
+    int sockfd;
+    struct addrinfo hints, * servinfo, *  p;
     struct sockaddr_in serv_addr, their_addr;
     socklen_t addr_len;
-    char buf[MAXBUFLEN] = { '\0' };
+    char buf[MAXBUFLEN];
+    char packet_buf[PACKET_MAXBUFLEN];
+    char filename[MAXBUFLEN];
 
 
 
@@ -32,6 +36,7 @@ int main (int argc, char **argv)
         exit(0);
     }
 
+    // Initialize empty buffer
 	memset(buf, 0, MAXBUFLEN);
 
     // Server socket address information
@@ -59,14 +64,14 @@ int main (int argc, char **argv)
     // Listening...
     printf("listening...\n");
     addr_len = sizeof their_addr;
-    if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN - 1, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1)
+    if (recvfrom(sockfd, buf, MAXBUFLEN - 1, 0, (struct sockaddr *)&their_addr, &addr_len) == -1)
     {
         perror("recvfrom");
         exit(1);
     }
 
     // Determine the return message
-    char  *message;
+    char * message;
     if (strcmp(buf, "ftp") == 0)
     {
         message = "yes";
@@ -80,6 +85,25 @@ int main (int argc, char **argv)
     if ((sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
     {
         perror("listener: sendto");
+        exit(1);
+    }
+
+    // Send datafile as packet struct
+    Packet packet;
+	memset(packet.filename, 0, MAXBUFLEN);
+    memset(filename, 0, MAXBUFLEN);
+
+    // Binary file to be created from packet
+    FILE * pFile;
+    char * base_filename;
+    sprintf(base_filename, "%.*s", (int)(strrchr(filename, '.') - filename), filename);
+    strcat(base_filename, ".bin");
+
+    printf("%s", base_filename);
+
+    if (recvfrom(sockfd, buf, PACKET_MAXBUFLEN, 0, (struct sockaddr *) &their_addr, &addr_len) == -1)
+    {
+        printf("listener: recvfrom\n");
         exit(1);
     }
 

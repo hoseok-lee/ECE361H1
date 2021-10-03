@@ -1,8 +1,5 @@
-CC=gcc
-SRC=deliver
-
-$(SRC): deliver.o
-	$(CC) $^ -o $@
+deliver: deliver.c ../packet.h
+	cc -c deliver.c
 
 clean:
-	rm -f *.o $(SRC)
+	rm -f *.o deliver

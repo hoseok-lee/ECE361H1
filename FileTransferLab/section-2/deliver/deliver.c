@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,16 +14,17 @@
 #include <ctype.h>
 #include <time.h>
 
-#define MAXBUFLEN 100
+// Packet
+#include "../packet.h"
 	
-int main (int argc, char **argv)
+int main (int argc, char ** argv)
 {
     int sockfd;
-    struct addrinfo hints, *servinfo, *p;
+    struct addrinfo hints, * servinfo, * p;
 	struct sockaddr_in serv_addr;
     socklen_t addr_len;
-	char buf[MAXBUFLEN] = { '\0' };
-	char filename[MAXBUFLEN] = { '\0' };
+	char buf[MAXBUFLEN];
+	char filename[MAXBUFLEN];
 
 
 
@@ -33,6 +35,7 @@ int main (int argc, char **argv)
         exit(0);
     }
 	
+    // Initialize empty buffer
 	memset(buf, 0, MAXBUFLEN);
 	memset(filename, 0, MAXBUFLEN);
 
@@ -58,7 +61,7 @@ int main (int argc, char **argv)
 	fgets(buf, MAXBUFLEN, stdin);
     
     // Check if the first command is "ftp"
-    char *ptr = strtok(buf, " \n");
+    char * ptr = strtok(buf, " \n");
     if (strcmp(ptr, "ftp") != 0)
     {
         printf("Invalid command.\n");
@@ -88,7 +91,7 @@ int main (int argc, char **argv)
     begin = clock();
 	
     // Send message to server
-    char *message = "ftp";
+    char * message = "ftp";
 	addr_len = sizeof serv_addr;
 	if ((sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&serv_addr, addr_len)) == -1)
     {

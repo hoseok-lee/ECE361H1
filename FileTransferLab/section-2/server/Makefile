@@ -1,8 +1,5 @@
-CC=gcc
-SRC=server
-
-$(SRC): server.o
-	$(CC) $^ -o $@
+server: server.c ../packet.h
+	cc -c server.c
 
 clean:
-	rm -f *.o $(SRC)
+	rm -f *.o server
