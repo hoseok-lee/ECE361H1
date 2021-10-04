@@ -24,7 +24,7 @@ int main (int argc, char ** argv)
     struct sockaddr_in serv_addr, their_addr;
     socklen_t addr_len;
     char buf[MAXBUFLEN];
-    char packet_buf[PACKET_MAXBUFLEN];
+    char package[PACKET_MAXBUFLEN];
     char filename[MAXBUFLEN];
 
 
@@ -41,7 +41,7 @@ int main (int argc, char ** argv)
 
     // Server socket address information
     serv_addr.sin_family = AF_INET;                 // Use IPv4
-    serv_addr.sin_port = htons(atoi(argv[1]));               // Convert port number to hosthort 
+    serv_addr.sin_port = htons(atoi(argv[1]));      // Convert port number to hosthort 
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);  // Convert address request to hostlong
 
     // Generate socket descriptor for binding
@@ -88,24 +88,66 @@ int main (int argc, char ** argv)
         exit(1);
     }
 
-    // Send datafile as packet struct
+    // Receiving datafile as packet struct
     Packet packet;
-	memset(packet.filename, 0, MAXBUFLEN);
+    packet.filename = (char *) malloc(sizeof(char) * MAXBUFLEN);
     memset(filename, 0, MAXBUFLEN);
 
     // Binary file to be created from packet
     FILE * pFile;
-    char * base_filename;
-    sprintf(base_filename, "%.*s", (int)(strrchr(filename, '.') - filename), filename);
-    strcat(base_filename, ".bin");
-
-    printf("%s", base_filename);
-
-    if (recvfrom(sockfd, buf, PACKET_MAXBUFLEN, 0, (struct sockaddr *) &their_addr, &addr_len) == -1)
+    bool initialize = false;
+    while (true)
     {
-        printf("listener: recvfrom\n");
-        exit(1);
+        // Receive packet from talker
+        memset(package, 0, PACKET_MAXBUFLEN);
+        if (recvfrom(sockfd, package, PACKET_MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len) == -1)
+        {
+            printf("listener (packet): recvfrom\n");
+            exit(1);
+        }
+
+        // Unpack packet into received packet
+        unpack_packet(package, &packet);
+
+        printf("receiving packet %d...\n", packet.frag_no);
+        // Initialize several variables
+        if (initialize == false)
+        {
+            // Convert the extension of the filename into a binary file
+            strcpy(filename, packet.filename);
+            //sprintf(filename, "%.*s", (int)(strrchr(filename, '.') - filename), filename);
+            //strcat(filename, ".bin");
+            pFile = fopen(filename, "w");
+
+            initialize = true;
+        }
+
+        // Write the packet filedata into the binary file created
+        if (fwrite(packet.filedata, sizeof(char), packet.size, pFile) != packet.size)
+        {
+            perror("listener (packet): fwrite");
+            exit(1);
+        }
+
+        // Generate ACK package and return it
+        strcpy(packet.filedata, "ACK");
+        pack_packet(&packet, package);
+        if ((sendto(sockfd, package, PACKET_MAXBUFLEN, 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+        {
+            perror("listener (ACK packet): sendto");
+            exit(1);
+        }
+
+        // End if all packets have been sent
+        if (packet.frag_no == packet.total_frag)
+        {
+            printf("closing file stream...\n");
+            break;
+        }
     }
+
+    fclose(pFile);
+    free(packet.filename);
 
     close(sockfd);
 
