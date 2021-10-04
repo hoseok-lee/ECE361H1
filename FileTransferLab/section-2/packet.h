@@ -27,11 +27,12 @@ void pack_packet (const Packet * packet, char * package)
 
     // Construct packet members
     sprintf(package, "%d:%d:%d:%s:", packet->total_frag, packet->frag_no, packet->size, packet->filename);
-    memcpy(package + strlen(package), packet->filedata, sizeof(char) * PACKET_MAXDATALEN);
+    memcpy(package + strlen(package), packet->filedata, packet->size);
 }
 
-void unpack_packet (const char * package, Packet * packet)
+void unpack_packet (char * package, Packet * packet)
 {
+    /*
     // Compile regex to match ":"
     // Use regex to avoid string functions such as strtok()
     // which will cause a segementation fault
@@ -75,7 +76,25 @@ void unpack_packet (const char * package, Packet * packet)
     ptr += (pmatch[0].rm_so + 1);
     
     // filedata
-    memcpy(packet->filedata, package + ptr, sizeof(char) * packet->size);
+    memcpy(packet->filedata, package + ptr, packet->size);
+    */
+    
+    // total_frag
+    packet->total_frag = atoi(strtok(package, ":"));
+    // frag_no
+    packet->frag_no = atoi(strtok(NULL, ":"));
+    // size
+    packet->size = atoi(strtok(NULL, ":"));
+    // filename
+    strcpy(packet->filename, strtok(NULL, ":"));
+    
+    // filedata
+    int header_size = strlen(strtok(package, ":")) + snprintf(NULL, 0, "%d", packet->frag_no) + snprintf(NULL, 0, "%d", packet->size) + strlen(packet->filename) + 4;
+    memcpy(packet->filedata, &package[header_size], packet->size);
+    if (packet->size < PACKET_MAXDATALEN)
+    {
+        packet->filedata[packet->size] = '\0';
+    }
 }
 
 #endif

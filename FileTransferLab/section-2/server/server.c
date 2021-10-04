@@ -94,8 +94,7 @@ int main (int argc, char ** argv)
     memset(filename, 0, MAXBUFLEN);
 
     // Binary file to be created from packet
-    FILE * pFile;
-    bool initialize = false;
+    FILE * pFile = NULL;
     while (true)
     {
         // Receive packet from talker
@@ -110,16 +109,10 @@ int main (int argc, char ** argv)
         unpack_packet(package, &packet);
 
         printf("receiving packet %d...\n", packet.frag_no);
-        // Initialize several variables
-        if (initialize == false)
+        if (pFile == NULL)
         {
-            // Convert the extension of the filename into a binary file
             strcpy(filename, packet.filename);
-            //sprintf(filename, "%.*s", (int)(strrchr(filename, '.') - filename), filename);
-            //strcat(filename, ".bin");
             pFile = fopen(filename, "w");
-
-            initialize = true;
         }
 
         // Write the packet filedata into the binary file created
