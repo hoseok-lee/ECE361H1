@@ -13,13 +13,19 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
+#include <math.h>
 
 // Packet
 #include "../packet.h"
 
 void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_addr)
 {
+    struct timeval tv;
+    fd_set readfds;
+    int rv, packet_len;
+    double sample_RTT = 0, estimated_RTT = 0, dev_RTT = 0, t1;
     socklen_t addr_len = sizeof serv_addr;
+    clock_t begin, end;
 
 
 
@@ -37,50 +43,53 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
     fseek(pFile, 0L, SEEK_END);
     int file_size = ftell(pFile);
     int total_frag = file_size / PACKET_MAXDATALEN + 1;
-    rewind(pFile);
+    fseek(pFile, 0, SEEK_SET);
 
     // Convert file into packets
-    // Array of packet information as strings for sending
-    char ** packets = malloc(sizeof(char *) * total_frag);
-
+    Packet packets[total_frag];
     for (int frag_no = 1; frag_no <= total_frag; ++frag_no)
     {
         // Instantiate packet as pointer
         // Initialize all its members
-        Packet * packet = malloc(sizeof(char) * PACKET_MAXBUFLEN);
-        packet->total_frag = total_frag;
-        packet->frag_no = frag_no;
-        packet->filename = filename;
+        packets[frag_no - 1].total_frag = total_frag;
+        packets[frag_no - 1].frag_no = frag_no;
+        packets[frag_no - 1].filename = filename;
         
-        // If the packet is not the last fragment, then the size will be the
-        // maximum packet size allowed (1000 bytes)
-        // Else if the packet is the last fragment, then the size will be the
-        // remaining amount of data in the file
-        packet->size = (frag_no < total_frag) ? PACKET_MAXDATALEN : (file_size % PACKET_MAXDATALEN);
-
         // Retrieve data for packet
-        memset(packet->filedata, 0, sizeof(char) * PACKET_MAXDATALEN);
-        fread((void *)packet->filedata, sizeof(char), packet->size, pFile);
-
-        // Store in packet array
-        packets[frag_no - 1] = malloc(sizeof(char) * PACKET_MAXBUFLEN);
-        pack_packet(packet, packets[frag_no - 1]);
+        packets[frag_no - 1].size = fread(packets[frag_no - 1].filedata, sizeof(char), PACKET_MAXDATALEN, pFile);
     }
+
+    // Close the file
+    fclose(pFile);
     
     // Packet to store for acknowledgement packets
     char ACK_buf[MAXBUFLEN];
-    Packet ACK_packet;
-    ACK_packet.filename = (char * ) malloc(sizeof(char) * MAXBUFLEN);
-    memset(ACK_packet.filename, 0, MAXBUFLEN);
-
     for (int frag_no = 1; frag_no <= total_frag;  ++frag_no)
     {
+        char * packed_packet = pack_packet(&packets[frag_no - 1], &packet_len);
+
+        // Start the timer
+        begin = clock();
+
         // Send packet through socket
         printf("sending packet %d...\n", frag_no);
-        if (sendto(sockfd, packets[frag_no - 1], MAXBUFLEN, 0, (struct sockaddr *)&serv_addr, addr_len) == -1)
+        if (sendto(sockfd, packed_packet, packet_len, 0, (struct sockaddr *)&serv_addr, addr_len) == -1)
         {
             perror("talker (send_file_as_packets): sendto");
             exit(1);
+        }
+
+        // Zero out read file descriptors
+        FD_ZERO(&readfds);
+        FD_SET(sockfd, &readfds);
+
+        // Check for timeouts
+        int n = sockfd + 1;
+        tv.tv_sec = t1;
+        if ((rv = select(n, &readfds, NULL, NULL, &tv)) == 0)
+        {
+            free(packed_packet);
+            continue;
         }
 
         // Receive ACK packet
@@ -91,30 +100,30 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
             exit(1);
         }
 
-        // Unpack the message into a Packet struct
-        unpack_packet(ACK_buf, &ACK_packet);
+        // End clock
+        end = clock();
+
+        // Set the sample RTT time for the current packet
+        sample_RTT = (double)(end - begin) / CLOCKS_PER_SEC;
+        // Calculate estimated RTT
+        estimated_RTT = (1 - 0.125) * estimated_RTT + (0.125 * sample_RTT);
+        // Calculate deviation RTT
+        dev_RTT = (1 - 0.25) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
+        // Calculated timeout interval
+        t1 = estimated_RTT + 4 * dev_RTT;
 
         // Perform assertions (validations) for ACK packet
-        if ((strcmp(ACK_packet.filedata, "ACK") == 0) && \
-            (ACK_packet.frag_no == frag_no))
+        if (strcmp(ACK_buf, "ACK") == 0)
         {
+            free(packed_packet);
             continue;
         }
         else
         {
-            perror("received NACK packet...\n");
+            perror("talker (send_file_as_packets): NACK received");
             exit(1);
         }
     }
-
-    // Deallocate all malloc-ed memory
-    fclose(pFile);
-    for (int frag_no = 1; frag_no <= total_frag; ++frag_no)
-    {
-        free(packets[frag_no - 1]);
-    }
-    free(packets);
-    free(ACK_packet.filename);
 }
 	
 int main (int argc, char ** argv)

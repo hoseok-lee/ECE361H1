@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
+#include <math.h>
 
 // Packet
 #include "../packet.h"
@@ -30,7 +31,7 @@ int main (int argc, char ** argv)
 
 
     // Check for number of arguments
-    if (argc != 2) 
+    if (argc != 2)
     {
         perror("usage: server <UDP listen port>");
         exit(0);
@@ -88,13 +89,9 @@ int main (int argc, char ** argv)
         exit(1);
     }
 
-    // Receiving datafile as packet struct
-    Packet packet;
-    packet.filename = (char *) malloc(sizeof(char) * MAXBUFLEN);
-    memset(filename, 0, MAXBUFLEN);
-
     // Binary file to be created from packet
     FILE * pFile = NULL;
+    bool * received;
     while (true)
     {
         // Receive packet from talker
@@ -106,41 +103,53 @@ int main (int argc, char ** argv)
         }
 
         // Unpack packet into received packet
-        unpack_packet(package, &packet);
-
-        printf("receiving packet %d...\n", packet.frag_no);
+        Packet * packet = unpack_packet(package);
+        printf("receiving packet %d...\n", packet->frag_no);
         if (pFile == NULL)
         {
-            strcpy(filename, packet.filename);
-            pFile = fopen(filename, "w");
+            received = (bool *) malloc(sizeof(bool) * packet->total_frag);
+            memset(received, false, sizeof(bool) * packet->total_frag);
+            pFile = fopen(packet->filename, "w");
         }
 
-        // Write the packet filedata into the binary file created
-        if (fwrite(packet.filedata, sizeof(char), packet.size, pFile) != packet.size)
+        // Check for duplicate packets
+        if (received[packet->frag_no - 1])
         {
-            perror("listener (packet): fwrite");
-            exit(1);
+            free(packet);
+        }
+        else
+        {
+            // Mark packet as received
+            received[packet->frag_no - 1] = true;
         }
 
         // Generate ACK package and return it
-        strcpy(packet.filedata, "ACK");
-        pack_packet(&packet, package);
-        if ((sendto(sockfd, package, PACKET_MAXBUFLEN, 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+        char * acknowledgement_message = "ACK";
+        if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
         {
             perror("listener (ACK packet): sendto");
             exit(1);
         }
 
+        // Write the packet filedata into the binary file created
+        if (fwrite(packet->filedata, sizeof(char), packet->size, pFile) != packet->size)
+        {
+            perror("listener (packet): fwrite");
+            exit(1);
+        }
+
         // End if all packets have been sent
-        if (packet.frag_no == packet.total_frag)
+        if (packet->frag_no == packet->total_frag)
         {
             printf("closing file stream...\n");
             break;
         }
+
+        // Free memory allocated
+        free(packet);
     }
 
     fclose(pFile);
-    free(packet.filename);
 
     close(sockfd);
 

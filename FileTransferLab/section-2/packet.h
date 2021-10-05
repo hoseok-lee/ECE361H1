@@ -20,81 +20,47 @@ typedef struct packet
     char filedata[PACKET_MAXDATALEN];
 } Packet;
 
-void pack_packet (const Packet * packet, char * package)
+char * pack_packet (Packet * packet, int * len)
 {
     // Initialize empty buffer
+    char * package = malloc(sizeof(char) * PACKET_MAXBUFLEN);
     memset(package, 0, PACKET_MAXBUFLEN);
 
     // Construct packet members
     sprintf(package, "%d:%d:%d:%s:", packet->total_frag, packet->frag_no, packet->size, packet->filename);
-    memcpy(package + strlen(package), packet->filedata, packet->size);
+    
+    // Determine header size
+    int header_size = strlen(package);
+
+    // Use memcpy() instead of string functions to avoid data corruption
+    memcpy(package + header_size, packet->filedata, packet->size);
+    // Record the total length of the package
+    *len = header_size + packet->size;
+
+    return package;
 }
 
-void unpack_packet (char * package, Packet * packet)
+Packet * unpack_packet (char * package)
 {
-    /*
-    // Compile regex to match ":"
-    // Use regex to avoid string functions such as strtok()
-    // which will cause a segementation fault
-    regex_t regex;
-    if (regcomp(&regex, "[:]", REG_EXTENDED)) 
-    {
-        perror("unpack_packet: regcomp");
-        exit(1);
-    }
-
-    // Match regex to find ":" 
-    regmatch_t pmatch[1];
-    int ptr = 0;
-    char buf[PACKET_MAXBUFLEN];
-
-    // total_frag
-    regexec(&regex, package + ptr, 1, pmatch, REG_NOTBOL);
-    memset(buf, 0, sizeof(char) * PACKET_MAXBUFLEN);
-    memcpy(buf, package + ptr, pmatch[0].rm_so);
-    packet->total_frag = atoi(buf);
-    ptr += (pmatch[0].rm_so + 1);
-
-    // frag_no
-    regexec(&regex, package + ptr, 1, pmatch, REG_NOTBOL);
-    memset(buf, 0, sizeof(char) * PACKET_MAXBUFLEN);
-    memcpy(buf, package + ptr, pmatch[0].rm_so);
-    packet->frag_no = atoi(buf);
-    ptr += (pmatch[0].rm_so + 1);
-
-    // size
-    regexec(&regex, package + ptr, 1, pmatch, REG_NOTBOL);
-    memset(buf, 0, sizeof(char) * PACKET_MAXBUFLEN);
-    memcpy(buf, package + ptr, pmatch[0].rm_so);
-    packet->size = atoi(buf);
-    ptr += (pmatch[0].rm_so + 1);
-
-    // filename
-    regexec(&regex, package + ptr, 1, pmatch, REG_NOTBOL);
-    memcpy(packet->filename, package + ptr, pmatch[0].rm_so);
-    packet->filename[pmatch[0].rm_so] = 0;
-    ptr += (pmatch[0].rm_so + 1);
-    
-    // filedata
-    memcpy(packet->filedata, package + ptr, packet->size);
-    */
-    
-    // total_frag
+    // Collect all packet data through string tokens
+    Packet * packet = malloc(sizeof(Packet));
     packet->total_frag = atoi(strtok(package, ":"));
-    // frag_no
     packet->frag_no = atoi(strtok(NULL, ":"));
-    // size
     packet->size = atoi(strtok(NULL, ":"));
-    // filename
-    strcpy(packet->filename, strtok(NULL, ":"));
-    
-    // filedata
+    packet->filename = strtok(NULL, ":");
+
+    // Determine the header size
+    // Add 4 to account for the 4 ":" characters
     int header_size = strlen(strtok(package, ":")) + snprintf(NULL, 0, "%d", packet->frag_no) + snprintf(NULL, 0, "%d", packet->size) + strlen(packet->filename) + 4;
+    
+    // Use memcpy() instead of string functions to avoid data corruption
     memcpy(packet->filedata, &package[header_size], packet->size);
-    if (packet->size < PACKET_MAXDATALEN)
-    {
+    // For the last packet, indicate the end of data
+    if (packet->size < 1000) {
         packet->filedata[packet->size] = '\0';
     }
+
+    return packet;
 }
 
 #endif
