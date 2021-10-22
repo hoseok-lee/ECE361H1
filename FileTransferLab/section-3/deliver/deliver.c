@@ -64,7 +64,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
     
     // Packet to store for acknowledgement packets
     char ACK_buf[MAXBUFLEN];
-    for (int frag_no = 1; frag_no <= total_frag;  ++frag_no)
+    for (int frag_no = 1; frag_no <= total_frag;)
     {
         char * packed_packet = pack_packet(&packets[frag_no - 1], &packet_len);
 
@@ -88,6 +88,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         tv.tv_sec = t1;
         if ((rv = select(n, &readfds, NULL, NULL, &tv)) == 0)
         {
+            // Timeout
             free(packed_packet);
             continue;
         }
@@ -104,24 +105,21 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         end = clock();
 
         // Set the sample RTT time for the current packet
-        sample_RTT = (double)(end - begin) / CLOCKS_PER_SEC;
+        sample_RTT = ((double) (end - begin)) / CLOCKS_PER_SEC;
         // Calculate estimated RTT
-        estimated_RTT = (1 - 0.125) * estimated_RTT + (0.125 * sample_RTT);
+        estimated_RTT = (0.875) * estimated_RTT + (0.125 * sample_RTT);
         // Calculate deviation RTT
-        dev_RTT = (1 - 0.25) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
+        dev_RTT = (0.75) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
         // Calculated timeout interval
         t1 = estimated_RTT + 4 * dev_RTT;
 
         // Perform assertions (validations) for ACK packet
         if (strcmp(ACK_buf, "ACK") == 0)
-        {
+        {  
+            // Move onto next packet
+            ++frag_no;
             free(packed_packet);
             continue;
-        }
-        else
-        {
-            perror("talker (send_file_as_packets): NACK received");
-            exit(1);
         }
     }
 }

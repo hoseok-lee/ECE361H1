@@ -98,8 +98,18 @@ int main (int argc, char ** argv)
         memset(package, 0, PACKET_MAXBUFLEN);
         if (recvfrom(sockfd, package, PACKET_MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len) == -1)
         {
-            printf("listener (packet): recvfrom\n");
-            exit(1);
+            // Client didn't sent anything
+            message = "NACK";
+
+            // Return the message with sendto
+            if ((sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+            {
+                perror("listener (NACK packet): sendto");
+                exit(1);
+            }
+
+            // Skip rest of logic flow
+            continue;
         }
 
         // Unpack packet into received packet
@@ -116,6 +126,17 @@ int main (int argc, char ** argv)
         if (received[packet->frag_no - 1])
         {
             free(packet);
+
+            // Generate ACK package and return it
+            char * acknowledgement_message = "ACK";
+            if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+            {
+                perror("listener (duplicate ACK packet): sendto");
+                exit(1);
+            }
+
+            // Skip rest of logic flow
+            continue;
         }
         else
         {
