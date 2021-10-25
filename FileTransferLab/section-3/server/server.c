@@ -114,7 +114,7 @@ int main (int argc, char ** argv)
 
         // Unpack packet into received packet
         Packet * packet = unpack_packet(package);
-        printf("receiving packet %d...\n", packet->frag_no);
+        //printf("receiving packet %d...\n", packet->frag_no);
         if (pFile == NULL)
         {
             received = (bool *) malloc(sizeof(bool) * packet->total_frag);

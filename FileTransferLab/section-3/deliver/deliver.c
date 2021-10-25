@@ -72,7 +72,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         begin = clock();
 
         // Send packet through socket
-        printf("sending packet %d...\n", frag_no);
+        ///printf("sending packet %d...\n", frag_no);
         if (sendto(sockfd, packed_packet, packet_len, 0, (struct sockaddr *)&serv_addr, addr_len) == -1)
         {
             perror("talker (send_file_as_packets): sendto");
@@ -84,12 +84,12 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         FD_SET(sockfd, &readfds);
 
         // Check for timeouts
-        int n = sockfd + 1;
         tv.tv_sec = t1;
-        if ((rv = select(n, &readfds, NULL, NULL, &tv)) == 0)
+        if ((rv = select(sockfd + 1, &readfds, NULL, NULL, &tv)) == 0)
         {
             // Timeout
             free(packed_packet);
+            printf("retransmitting packet %d...\n", frag_no);
             continue;
         }
 
@@ -107,7 +107,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         // Set the sample RTT time for the current packet
         sample_RTT = ((double) (end - begin)) / CLOCKS_PER_SEC;
         // Calculate estimated RTT
-        estimated_RTT = (0.875) * estimated_RTT + (0.125 * sample_RTT);
+        estimated_RTT = (1 - 0.125) * estimated_RTT + (0.125 * sample_RTT);
         // Calculate deviation RTT
         dev_RTT = (0.75) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
         // Calculated timeout interval
