@@ -23,10 +23,9 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
 {
     struct timeval timeout;
     fd_set readfds;
-    int rv, packet_len;
+    int packet_len;
     double sample_RTT = 0, estimated_RTT = 0, dev_RTT = 0, t1 = 99999;
     socklen_t addr_len = sizeof serv_addr;
-    //clock_t begin, end;
     struct timeval begin, end;
 
 
@@ -89,10 +88,8 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         timeout.tv_sec = 0;
         timeout.tv_usec = t1;
 
-        //printf("%f\n", t1);
-
         // Set timeout
-        if ((rv = select(sockfd + 1, &readfds, NULL, NULL, &timeout)) == 0)
+        if (select(sockfd + 1, &readfds, NULL, NULL, &timeout) == 0)
         {
             // Timeout
             free(packed_packet);
