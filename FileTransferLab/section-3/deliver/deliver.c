@@ -109,7 +109,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         // Calculate estimated RTT
         estimated_RTT = (1 - 0.125) * estimated_RTT + (0.125 * sample_RTT);
         // Calculate deviation RTT
-        dev_RTT = (0.75) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
+        dev_RTT = (1 - 0.25) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
         // Calculated timeout interval
         t1 = estimated_RTT + 4 * dev_RTT;
 

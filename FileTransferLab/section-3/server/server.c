@@ -127,7 +127,8 @@ int main (int argc, char ** argv)
         {
             free(packet);
             
-            if (rand() % 100 > 1) {
+            if (rand() % 100 > 1) 
+            {
                 // Generate ACK package and return it
                 char * acknowledgement_message = "ACK";
                 if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
@@ -136,8 +137,8 @@ int main (int argc, char ** argv)
                     exit(1);
                 }
             }
-            
-            else {
+            else 
+            {
                 printf("Packet dropped! \n");
             }
 
