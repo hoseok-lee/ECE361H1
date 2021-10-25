@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
+#include <sys/time.h>
 
 // Packet
 #include "../packet.h"
@@ -126,37 +127,28 @@ int main (int argc, char ** argv)
         if (received[packet->frag_no - 1])
         {
             free(packet);
-            
-            if (rand() % 100 > 1) 
-            {
-                // Generate ACK package and return it
-                char * acknowledgement_message = "ACK";
-                if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
-                {
-                    perror("listener (duplicate ACK packet): sendto");
-                    exit(1);
-                }
-            }
-            else 
-            {
-                printf("Packet dropped! \n");
-            }
 
             // Skip rest of logic flow
             continue;
         }
-        else
-        {
-            // Mark packet as received
-            received[packet->frag_no - 1] = true;
-        }
 
-        // Generate ACK package and return it
-        char * acknowledgement_message = "ACK";
-        if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+        if ((rand() % 100) > 1)
         {
-            perror("listener (ACK packet): sendto");
-            exit(1);
+            // Generate ACK package and return it
+            char * acknowledgement_message = "ACK";
+            if ((sendto(sockfd, acknowledgement_message, strlen(acknowledgement_message), 0, (struct sockaddr *)&their_addr, addr_len)) == -1)
+            {
+                perror("listener (duplicate ACK packet): sendto");
+                exit(1);
+            }
+        }
+        else 
+        {
+            printf("packet %d dropped...\n", packet->frag_no);
+            free(packet);
+
+            // Skip rest of logic flow
+            continue;
         }
 
         // Write the packet filedata into the binary file created
@@ -172,6 +164,9 @@ int main (int argc, char ** argv)
             printf("closing file stream...\n");
             break;
         }
+
+        // Mark packet as received
+        received[packet->frag_no - 1] = true;
 
         // Free memory allocated
         free(packet);

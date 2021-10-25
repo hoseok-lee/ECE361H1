@@ -14,18 +14,20 @@
 #include <ctype.h>
 #include <time.h>
 #include <math.h>
+#include <sys/time.h>
 
 // Packet
 #include "../packet.h"
 
 void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_addr)
 {
-    struct timeval tv;
+    struct timeval timeout;
     fd_set readfds;
     int rv, packet_len;
-    double sample_RTT = 0, estimated_RTT = 0, dev_RTT = 0, t1;
+    double sample_RTT = 0, estimated_RTT = 0, dev_RTT = 0, t1 = 99999;
     socklen_t addr_len = sizeof serv_addr;
-    clock_t begin, end;
+    //clock_t begin, end;
+    struct timeval begin, end;
 
 
 
@@ -61,7 +63,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
 
     // Close the file
     fclose(pFile);
-    
+
     // Packet to store for acknowledgement packets
     char ACK_buf[MAXBUFLEN];
     for (int frag_no = 1; frag_no <= total_frag;)
@@ -69,7 +71,7 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         char * packed_packet = pack_packet(&packets[frag_no - 1], &packet_len);
 
         // Start the timer
-        begin = clock();
+        gettimeofday(&begin, NULL);
 
         // Send packet through socket
         ///printf("sending packet %d...\n", frag_no);
@@ -84,8 +86,13 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         FD_SET(sockfd, &readfds);
 
         // Check for timeouts
-        tv.tv_sec = t1;
-        if ((rv = select(sockfd + 1, &readfds, NULL, NULL, &tv)) == 0)
+        timeout.tv_sec = 0;
+        timeout.tv_usec = t1;
+
+        //printf("%f\n", t1);
+
+        // Set timeout
+        if ((rv = select(sockfd + 1, &readfds, NULL, NULL, &timeout)) == 0)
         {
             // Timeout
             free(packed_packet);
@@ -102,24 +109,20 @@ void send_file_as_packets (char * filename, int sockfd, struct sockaddr_in serv_
         }
 
         // End clock
-        end = clock();
-
-        // Set the sample RTT time for the current packet
-        sample_RTT = ((double) (end - begin)) / CLOCKS_PER_SEC;
-        // Calculate estimated RTT
+        gettimeofday(&end, NULL);
+        
+        // Recalculate timeout interval for future packets
+        sample_RTT = (end.tv_usec - begin.tv_usec);
         estimated_RTT = (1 - 0.125) * estimated_RTT + (0.125 * sample_RTT);
-        // Calculate deviation RTT
         dev_RTT = (1 - 0.25) * dev_RTT + (0.25) * fabs(sample_RTT - estimated_RTT);
-        // Calculated timeout interval
-        t1 = estimated_RTT + 4 * dev_RTT;
+        t1 = 4 * estimated_RTT;
 
         // Perform assertions (validations) for ACK packet
         if (strcmp(ACK_buf, "ACK") == 0)
-        {  
+        {
             // Move onto next packet
             ++frag_no;
             free(packed_packet);
-            continue;
         }
     }
 }
@@ -194,8 +197,8 @@ int main (int argc, char ** argv)
 
     // Measure the round-trip time from the client to the server
     // Start the timer
-    clock_t begin, end;
-    begin = clock();
+    struct timeval begin, end;
+    gettimeofday(&begin, NULL);
 	
     // Send message to server
     char * message = "ftp";
@@ -214,8 +217,9 @@ int main (int argc, char ** argv)
 	}
 
     // End the timer
-    end = clock();
-    printf("Total round-trip time: %g milliseconds\n", (((double) (end - begin)) / CLOCKS_PER_SEC) * 1000);
+    gettimeofday(&end, NULL);
+    double initial_RTT = (end.tv_usec - begin.tv_usec);
+    printf("Total round-trip time: %g microseconds\n", initial_RTT);
 	
     // File transfer can start once acknowledgement message has been sent
 	if (strcmp(buf, "yes") == 0)
