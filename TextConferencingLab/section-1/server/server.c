@@ -20,7 +20,7 @@
 // Message
 #include "../message.h"
 
-#define MAX_USERS 2
+#define MAX_USERS 4
 
 int main (int argc, char ** argv)
 {
@@ -34,11 +34,15 @@ int main (int argc, char ** argv)
     // Userenames and passwords
     char * username_database[MAX_USERS] = {
         "admin", 
-        "guest"
+        "guest",
+        "jane",
+        "john"
     };
     char * password_database[MAX_USERS] = {
         "admin", 
-        "guest"
+        "guest",
+        "abcd",
+        "1234"
     };
 
 
@@ -64,7 +68,7 @@ int main (int argc, char ** argv)
     printf("creating socket...\n");
     if ((sockfd = socket(res->ai_family, res->ai_socktype, 0)) == -1)
     {
-        perror("listener: socket");
+        perror("server: socket");
         exit(1);
     }
 
@@ -72,7 +76,7 @@ int main (int argc, char ** argv)
     int silence_error = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &silence_error, sizeof(int)))
     {
-        perror("listener: setsockopt");
+        perror("server: setsockopt");
         exit(1);
     }
 
@@ -80,7 +84,7 @@ int main (int argc, char ** argv)
     printf("binding...\n");
     if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
-        perror("listener: bind");
+        perror("server: bind");
         exit(1);
     }
 
@@ -89,7 +93,7 @@ int main (int argc, char ** argv)
     int incoming_queues = 20;
     if (listen(sockfd, incoming_queues) == -1)
     {
-        perror("listener: listen");
+        perror("server: listen");
         exit(1);
     }
 
@@ -109,8 +113,8 @@ int main (int argc, char ** argv)
         user_list[i].socket = -1;
         strcpy(user_list[i].ip_address, "\0");
         strcpy(user_list[i].name, "\0");
-        user_list[i].session = -1;
-        user_list[i].port = -1;
+        strcpy(user_list[i].session_ID, "\0");
+        user_list[i].port_number = -1;
     }
 
     while (true)
@@ -122,7 +126,7 @@ int main (int argc, char ** argv)
         printf("selecting...\n");
         if (select(maxfd + 1, &readfd, NULL, NULL, NULL) == -1)
         {
-            perror("listener: select");
+            perror("server: select");
             exit(1);
         }
 
@@ -144,9 +148,9 @@ int main (int argc, char ** argv)
             if (i == sockfd)
             {
                 int newfd;
-                if ((newfd = accept(sockfd, (struct sockaddr *)&addr, &addr_len))) == -1)
+                if ((newfd = accept(sockfd, (struct sockaddr *)&addr, &addr_len)) == -1)
                 {
-                    perror("listener: accept");
+                    perror("server: accept");
                     exit(1);
                 }
 
@@ -162,7 +166,8 @@ int main (int argc, char ** argv)
             {
                 // Receive packaged message data from client
                 int message_len;
-                if ((message_len = recv(i, package, MESSAGE_MAXBUFLEN - 1, 0) <= 0)
+                memset(package, 0, MESSAGE_MAXBUFLEN);
+                if ((message_len = recv(i, package, MESSAGE_MAXBUFLEN - 1, 0)) == -1)
                 {
                     // On error, remove socket descriptor from master list
                     close(i);
@@ -173,7 +178,7 @@ int main (int argc, char ** argv)
                 // Parse package
                 int type = atoi(strtok(package, ":"));
                 int size = atoi(strtok(NULL, ":"));
-                char * name = strtok(NULL, ":");
+                char * username = strtok(NULL, ":");
 
                 // Check whether the user has already logged in or not
                 bool logged = false;
@@ -186,43 +191,280 @@ int main (int argc, char ** argv)
                     }
                 }
 
-                // As long as the user is not attempting to log in
-                // or is already logged in
-                if (!(strcmp(package, "LOGIN")) && !logged)
+                // User attempts to log in and is currently not already logged in
+                if ((type == LOGIN) && (logged == false))
                 {
+                    // Gather password from message package
+                    char * password = strtok(NULL, "\n");
 
+                    printf("%s, %s\n", username, password);
+
+                    // Check if user is already in the list of users
+                    bool online = false;
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        if (strcmp(user_list[j].name, username) == 0)
+                        {
+                            online = true;
+                            break;
+                        }
+                    }
+
+                    // Check for credentials in user database
+                    bool user_found = false;
+                    for (int j = 0; (j < MAX_USERS) && (online == false); ++j)
+                    {
+                        // Match found
+                        if ((strcmp(username_database[j], username) == 0) && \
+                            (strcmp(password_database[j], password) == 0))
+                        {
+                            // Find the first available user spot
+                            for (int k = 0; k < MAX_USERS; ++k)
+                            {
+                                // Socket is not yet set
+                                if (user_list[k].socket == -1)
+                                {
+                                    // Get their socket information
+                                    struct sockaddr_in their_addr;
+                                    socklen_t addr_len = sizeof their_addr;
+                                    getpeername(i, (struct sockaddr *)&their_addr, &addr_len);
+
+                                    char ip_address[INET6_ADDRSTRLEN];
+                                    inet_ntop(AF_INET, &(their_addr.sin_addr), ip_address, INET_ADDRSTRLEN);
+
+                                    // Update user information
+                                    user_list[k].socket = i;
+                                    strcpy(user_list[k].ip_address, ip_address);
+                                    strcpy(user_list[k].name, username);
+                                    strcpy(user_list[i].session_ID, "\0");
+                                    user_list[k].port_number = their_addr.sin_port;
+                                    break;
+                                }
+                            }
+
+                            // Send acknowledgement message
+                            serv_message.type = LO_ACK;
+                            serv_message.size = 0;
+
+                            // Found a user
+                            user_found = true;
+                            break;
+                        }
+                    }
+
+                    // If no user was found, send a NACK packet
+                    if (user_found == false)
+                    {
+                        char * error_message = "wrong credentials";
+                        serv_message.type = LO_NAK;
+                        serv_message.size = strlen(error_message);
+                        strcpy(serv_message.data, error_message);
+                    }
+
+                    // Pack and send message
+                    char * packed_message = pack_message(&serv_message);
+                    if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                    {
+                        perror("client (LO_ACK): send");
+                        exit(1);
+                    }
+                    free(packed_message);
                 }
-                else if (!(strcmp(package, "EXIT")))
+                else if (type == JOIN)
                 {
+                    // Gather session from package
+                    char * session_ID = strtok(NULL, "\n");
 
+                    // Chcek if session exists
+                    bool session_exists = false;
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        if (strcmp(user_list[j].session_ID, session_ID) == 0)
+                        {
+                            session_exists = true;
+                            break;
+                        }
+                    }
+
+                    if (session_exists == true) 
+                    {
+                        // Send ACK to acknowledge joining session
+                        serv_message.type = JN_ACK;
+                        serv_message.size = 0;
+
+                         // Add user to the session
+                        for (int j = 0; j < MAX_USERS; ++j)
+                        {
+                            if (user_list[j].socket == i)
+                            {
+                                strcpy(user_list[j].session_ID, session_ID);
+                                break;
+                            }
+                        }
+                    }
+                    // Send a NACK if session does not exist
+                    else
+                    {
+                        char error_message[MAX_DATA];
+                        sprintf(error_message, "session %s does not exist", session_ID);
+
+                        serv_message.type = JN_NAK;
+                        serv_message.size = strlen(error_message);
+                        strcpy(serv_message.data, error_message);
+                    }
+
+                    // Pack and send message
+                    char * packed_message = pack_message(&serv_message);
+                    if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                    {
+                        perror("client (JN_ACK): send");
+                        exit(1);
+                    }
+                    free(packed_message);
                 }
-                else if (!(strcmp(package, "JOIN")))
+                else if (type == LEAVE_SESS)
                 {
-
+                    // Remove user from the session
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        // Reset to default
+                        if (user_list[j].socket == i)
+                        {
+                            strcpy(user_list[j].session_ID, "\0");
+                            break;
+                        }
+                    }
                 }
-                else if (!(strcmp(package, "LEAVE_SESS")))
+                else if (type == NEW_SESS)
                 {
+                    // Gather session from package
+                    char * session_ID = strtok(NULL, "\n");
 
+                    // Update user
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        if (user_list[j].socket == i)
+                        {
+                            strcpy(user_list[j].session_ID, session_ID);
+                            break;
+                        }
+                    }
+
+                    // Send acknowledgement
+                    serv_message.type = NS_ACK;
+                    serv_message.size = 0;
+
+                    // Pack and send message
+                    char * packed_message = pack_message(&serv_message);
+                    if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                    {
+                        perror("client (NS_ACK): send");
+                        exit(1);
+                    }
+                    free(packed_message);
                 }
-                else if (!(strcmp(package, "NEW_SESS")))
+                else if (type == QUERY)
                 {
+                    memset(serv_message.data, 0, MAX_DATA);
+                    // Generate a list of all users
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        // As long as the user entry is not empty
+                        if (strcmp(user_list[j].name, "\0") != 0)
+                        {
+                            strcat(serv_message.data, user_list[j].name);
+                            strcat(serv_message.data, " <");
+                            if (strcmp(user_list[j].session_ID, "\0") == 0)
+                            {
+                                strcat(serv_message.data, "no session");
+                            }
+                            else
+                            {
+                                strcat(serv_message.data, user_list[j].session_ID);
+                            }
+                            strcat(serv_message.data, ">\n");
+                        }
+                    }
 
+                    printf("%s", serv_message.data);
+                    
+                    // ACK package
+                    serv_message.type = QU_ACK;
+                    serv_message.size = strlen(serv_message.data);
+
+                    // Pack and send message
+                    char * packed_message = pack_message(&serv_message);
+                    if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                    {
+                        perror("client (QU_ACK): send");
+                        exit(1);
+                    }
+                    free(packed_message);
                 }
-                else if (!(strcmp(package, "NS_ACK")))
+                else if (type == EXIT)
                 {
+                    // Terminate the connection
+                    close(i);
+                    FD_CLR(i, &master);
 
+                    // Remove client from user list
+                    for (int j = 0; j < MAX_USERS; ++j) 
+                    {
+                        // Reset user list entry
+                        if (user_list[j].socket == i) {
+                            user_list[j].socket = -1;
+                            strcpy(user_list[j].ip_address, "\0");
+                            strcpy(user_list[j].name, "\0");
+                            strcpy(user_list[i].session_ID, "\0");
+                            user_list[j].port_number = -1;
+                            break;
+                        }
+                    }
                 }
-                else if (!(strcmp(package, "MESSAGE")))
+                else if (type == MESSAGE)
                 {
+                    // Parse client message
+                    char * client_message = strtok(NULL, "\0");
 
-                }
-                else if (!(strcmp(package, "QUERY")))
-                {
+                    // Create package
+                    serv_message.type = MESSAGE;
+                    strcpy(serv_message.data, username);
+                    strcat(serv_message.data, ": ");
+                    strcat(serv_message.data, client_message);
+                    serv_message.size = strlen(serv_message.data);
 
-                }
-                else if (!(strcmp(package, "INVITE")))
-                {
+                    // Check which session the client is a part of
+                    int session_sock;
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        if (user_list[j].socket == i)
+                        {
+                            session_sock = j;
+                        }
+                    }
 
+                    // Skip clients that are not part of any session
+                    if (strcmp(user_list[session_sock].session_ID, "\0") == 0)
+                    {
+                        continue;
+                    }
+
+                    // Iterate through all sockets and determine which one shares sessions
+                    for (int j = 0; j < MAX_USERS; ++j)
+                    {
+                        // But don't send to itself
+                        if ((strcmp(user_list[j].session_ID, user_list[session_sock].session_ID) == 0) && (j != session_sock))
+                        {
+                            // Pack and send message
+                            char * packed_message = pack_message(&serv_message);
+                            if (send(user_list[j].socket, packed_message, strlen(packed_message), 0) == -1)
+                            {
+                                perror("client (MESSAGE): send");
+                                exit(1);
+                            }
+                            free(packed_message);
+                        }
+                    }
                 }
             }
         }
