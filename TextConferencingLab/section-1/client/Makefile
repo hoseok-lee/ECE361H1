@@ -8,7 +8,7 @@ EXES=$(SRCS:.c=)
 all: $(EXES)
 
 $(EXES): client.o
-	$(CC) $^ -o $@
+	$(CC) $^ -o $@ -lpthread
 
 $(OBJS): $(SRCS) $(INC)
 	$(CC) -g -Wall $(CFLAGS) $(SRCS)

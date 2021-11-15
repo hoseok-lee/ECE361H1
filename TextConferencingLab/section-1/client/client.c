@@ -166,7 +166,7 @@ int main (int argc, char ** argv)
                     logged = true;
 
                     // Begin receive message thread
-                    pthread_create(&receive_proc, NULL, receive_message, &sockfd);
+                    pthread_create(&receive_proc, NULL, receive_message, (void *)&sockfd);
                 }
                 // ack_type == LO_NAK
                 else
