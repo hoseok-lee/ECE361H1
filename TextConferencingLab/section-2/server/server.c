@@ -77,37 +77,7 @@ int main (int argc, char ** argv)
             user_list_head = curr;
         }
     }
-
-    curr = user_list_head;
-    while (curr != NULL)
-    {
-        printf("%s", curr->username);
-        curr = curr->next_user;
-    }
-
-
-    const int MAX_USERS = 4;
-
-    Users user_list[MAX_USERS];
-
-
-
-    // Userenames and passwords
-    char * username_database[MAX_USERS] = {
-        "admin", 
-        "guest",
-        "jane",
-        "john"
-    };
-    char * password_database[MAX_USERS] = {
-        "admin", 
-        "guest",
-        "abcd",
-        "1234"
-    };
-
-
-
+    
     // Check for number of arguments
     if (argc != 2)
     {
@@ -169,15 +139,6 @@ int main (int argc, char ** argv)
     addr_len = sizeof(addr);
 
     // Initialize user list with empty buffers
-    for (int i = 0; i < MAX_USERS; ++i)
-    {
-        user_list[i].socket = -1;
-        strcpy(user_list[i].ip_address, "\0");
-        strcpy(user_list[i].name, "\0");
-        strcpy(user_list[i].session_ID, "\0");
-        user_list[i].port_number = -1;
-    }
-
     curr = user_list_head;
     while (curr != NULL)
     {
@@ -273,13 +234,13 @@ int main (int argc, char ** argv)
                     // Gather password from message package
                     char * password = strtok(NULL, "\n");
 
-                    printf("%s, %s\n", username, password);
-
-                    // Check if user is already in the list of users
+                    // Check if user is online
                     bool online = false;
                     curr = user_list_head;
                     while (curr != NULL)
                     {
+                        // While curr->username will always be filled in, 
+                        // curr->user.name will only be filled in on log-in
                         if (strcmp(curr->user.name, username) == 0)
                         {
                             online = true;
@@ -325,8 +286,15 @@ int main (int argc, char ** argv)
                         curr = curr->next_user;
                     }
 
+                    if (online == true)
+                    {
+                        char * error_message = "user already logged in";
+                        serv_message.type = LO_NAK;
+                        serv_message.size = strlen(error_message);
+                        strcpy(serv_message.data, error_message);
+                    }
                     // If no user was found, send a NACK packet
-                    if (user_found == false)
+                    else if (user_found == false)
                     {
                         char * error_message = "wrong credentials";
                         serv_message.type = LO_NAK;
@@ -519,9 +487,7 @@ int main (int argc, char ** argv)
 
                     // Create package
                     serv_message.type = MESSAGE;
-                    strcpy(serv_message.data, username);
-                    strcat(serv_message.data, ": ");
-                    strcat(serv_message.data, client_message);
+                    sprintf(serv_message.data, "%s: %s", username, client_message);
                     serv_message.size = strlen(serv_message.data);
 
                     // Check which session the client is a part of
@@ -537,8 +503,6 @@ int main (int argc, char ** argv)
 
                         curr = curr->next_user;
                     }
-
-                    printf("reached");
 
                     // Iterate through all sockets and determine which one shares sessions
                     curr = user_list_head;
@@ -559,6 +523,97 @@ int main (int argc, char ** argv)
                         }
 
                         curr = curr->next_user;
+                    }
+                }
+                else if (type == WHISPER)
+                {
+                    // Parse client message
+                    char * client_message = strtok(NULL, "\0");
+                    char * receiver = strtok(client_message, ":");
+                    char * message_body = strtok(NULL, "\0");
+
+                    // Create package
+                    serv_message.type = WHISPER;
+                    // Note that the username actually contains the receiver, not the sender
+                    sprintf(serv_message.data, "%s (whispered): %s\n", username, message_body);
+                    serv_message.size = strlen(serv_message.data);
+
+                    // Find original sender
+                    UserInfo * sender;
+                    curr = user_list_head;
+                    while (curr != NULL)
+                    {
+                        if (curr->user.socket == i)
+                        {
+                            sender = curr;
+                            break;
+                        }
+
+                        curr = curr->next_user;
+                    }
+
+                    // Check if user is online
+                    bool online = false;
+                    curr = user_list_head;
+                    while (curr != NULL)
+                    {
+                        // While curr->username will always be filled in, 
+                        // curr->user.name will only be filled in on log-in
+                        if (strcmp(curr->user.name, receiver) == 0)
+                        {
+                            online = true;
+                            break;
+                        }
+
+                        curr = curr->next_user;
+                    }
+
+                    // Cannot send messages to itself
+                    if (strcmp(username, receiver) == 0)
+                    {
+                        serv_message.type = WS_NAK;
+                        strcpy(serv_message.data, "cannot send messages to yourself");
+                        serv_message.size = strlen(serv_message.data);
+                    }
+                    else if (online == false)
+                    {
+                        serv_message.type = WS_NAK;
+                        strcpy(serv_message.data, "user is not online");
+                        serv_message.size = strlen(serv_message.data);
+                    }
+                    else
+                    {
+                        // Iterate through all sockets and determine the proper username
+                        curr = user_list_head;
+                        while (curr != NULL)
+                        {
+                            if (strcmp(curr->username, receiver) == 0)
+                            {
+                                // Pack and send message
+                                char * packed_message = pack_message(&serv_message);
+                                if (send(curr->user.socket, packed_message, strlen(packed_message), 0) == -1)
+                                {
+                                    perror("client (WHISPER): send");
+                                    exit(1);
+                                }
+                                free(packed_message);
+                                break;
+                            }
+
+                            curr = curr->next_user;
+                        }
+                    }
+
+                    if (serv_message.type == WS_NAK) 
+                    {
+                        // Pack and send message
+                        char * packed_message = pack_message(&serv_message);
+                        if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                        {
+                            perror("client (WS_NAK): send");
+                            exit(1);
+                        }
+                        free(packed_message);
                     }
                 }
             }

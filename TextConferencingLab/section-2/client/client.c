@@ -72,6 +72,14 @@ void * receive_message (void * sockfd_void)
         {
             printf("%s", data);
         }
+        else if (type == WHISPER)
+        {
+            printf("%s", data);
+        }
+        else if (type == WS_NAK)
+        {
+            printf("Whisper message error: %s\n", data);
+        }
     }
 
     return NULL;
@@ -197,8 +205,6 @@ int main (int argc, char ** argv)
                     perror("client: send");
                     exit(1);
                 }
-
-                // Clean up
                 free(packed_message);
             }
             // LEAVESESSION
@@ -215,18 +221,17 @@ int main (int argc, char ** argv)
                     perror("client: send");
                     exit(1);
                 }
+                free(packed_message);
+
                 session = false;
 
                 printf("Left session!\n");
-
-                // Clean up
-                free(packed_message);
             }
             // CREATESESSION
             else if ((strcmp(command, "/createsession") == 0) && (logged == true) && (session == false))
             {
                 // Retrieve arguments
-                char * session_ID = strtok(NULL, "\0");
+                char * session_ID = strtok(NULL, "\n");
 
                 // Build create session request message
                 message.type = NEW_SESS;
@@ -240,8 +245,6 @@ int main (int argc, char ** argv)
                     perror("client: send");
                     exit(1);
                 }
-
-                // Clean up
                 free(packed_message);
             }
             // LIST
@@ -258,12 +261,10 @@ int main (int argc, char ** argv)
                     perror("client: send");
                     exit(1);
                 }
-                
-                // Clean up
                 free(packed_message);
             }
             // QUIT
-            else if ((strcmp(input, "/quit\n") == 0))
+            else if (strcmp(input, "/quit\n") == 0)
             {
                 if (logged == true)
                 {
@@ -278,15 +279,35 @@ int main (int argc, char ** argv)
                         perror("client: send");
                         exit(1);
                     }
-                    logged = false;
-
-                    // Clean up
                     free(packed_message);
+
+                    logged = false;
                 }
 
                 printf("Exiting...\n");
 
                 return 0;
+            }
+            // WHISPER
+            else if ((strcmp(input, "/whisper") == 0) &&  (logged == true))
+            {
+                // Retrieve arguments
+                char * receiver = strtok(NULL, " ");
+                char * data = strtok(NULL, "\n");
+
+                // Create new message struct
+                message.type = WHISPER;
+                sprintf(message.data, "%s:%s", receiver, data);
+                message.size = strlen(message.data);
+
+                // Send serialized message
+                char * packed_message = pack_message(&message);
+                if (send(sockfd, packed_message, strlen(packed_message), 0) == -1)
+                {
+                    perror("client: send");
+                    exit(1);
+                }
+                free(packed_message);
             }
         }
         // MESSAGE
@@ -303,8 +324,6 @@ int main (int argc, char ** argv)
                 perror("client: send");
                 exit(1);
             }
-
-            // Clean up
             free(packed_message);
         }
     }
