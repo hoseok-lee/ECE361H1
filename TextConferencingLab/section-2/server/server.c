@@ -441,8 +441,6 @@ int main (int argc, char ** argv)
 
                         curr = curr->next_user;
                     }
-
-                    printf("%s", serv_message.data);
                     
                     // ACK package
                     serv_message.type = QU_ACK;
@@ -532,26 +530,6 @@ int main (int argc, char ** argv)
                     char * receiver = strtok(client_message, ":");
                     char * message_body = strtok(NULL, "\0");
 
-                    // Create package
-                    serv_message.type = WHISPER;
-                    // Note that the username actually contains the receiver, not the sender
-                    sprintf(serv_message.data, "%s (whispered): %s\n", username, message_body);
-                    serv_message.size = strlen(serv_message.data);
-
-                    // Find original sender
-                    UserInfo * sender;
-                    curr = user_list_head;
-                    while (curr != NULL)
-                    {
-                        if (curr->user.socket == i)
-                        {
-                            sender = curr;
-                            break;
-                        }
-
-                        curr = curr->next_user;
-                    }
-
                     // Check if user is online
                     bool online = false;
                     curr = user_list_head;
@@ -572,21 +550,28 @@ int main (int argc, char ** argv)
                     if (strcmp(username, receiver) == 0)
                     {
                         serv_message.type = WS_NAK;
-                        strcpy(serv_message.data, "cannot send messages to yourself");
+                        strcpy(serv_message.data, "cannot send whispers to yourself");
                         serv_message.size = strlen(serv_message.data);
                     }
                     else if (online == false)
                     {
                         serv_message.type = WS_NAK;
-                        strcpy(serv_message.data, "user is not online");
+                        sprintf(serv_message.data, "user \"%s\" is not online", receiver);
                         serv_message.size = strlen(serv_message.data);
                     }
                     else
                     {
+                        // Create package
+                        serv_message.type = WHISPER;
+                        // Note that the username actually contains the receiver, not the sender
+                        sprintf(serv_message.data, "%s (whispered): %s\n", username, message_body);
+                        serv_message.size = strlen(serv_message.data);
+
                         // Iterate through all sockets and determine the proper username
                         curr = user_list_head;
                         while (curr != NULL)
                         {
+                            // Find user with matching receiver username
                             if (strcmp(curr->username, receiver) == 0)
                             {
                                 // Pack and send message
@@ -611,6 +596,106 @@ int main (int argc, char ** argv)
                         if (send(i, packed_message, strlen(packed_message), 0) == -1)
                         {
                             perror("client (WS_NAK): send");
+                            exit(1);
+                        }
+                        free(packed_message);
+                    }
+                }
+                else if (type == INVITE)
+                {
+                    // Parse client message
+                    char * receiver = strtok(NULL, "\0");
+
+                    // Check if sender is in a session
+                    bool session = false;
+                    UserInfo * sender;
+                    curr = user_list_head;
+                    while (curr != NULL)
+                    {
+                        if ((strcmp(curr->username, username) == 0) &&
+                            (strcmp(curr->user.session_ID, "\0") != 0))
+                        {
+                            sender = curr;
+                            session = true;
+                            break;
+                        }
+
+                        curr = curr->next_user;
+                    }
+
+                    // Check if receiver is online
+                    bool online = false;
+                    curr = user_list_head;
+                    while (curr != NULL)
+                    {
+                        // While curr->username will always be filled in, 
+                        // curr->user.name will only be filled in on log-in
+                        if (strcmp(curr->user.name, receiver) == 0)
+                        {
+                            online = true;
+                            break;
+                        }
+
+                        curr = curr->next_user;
+                    }
+
+                    // Cannot send invites to itself
+                    if (strcmp(username, receiver) == 0)
+                    {
+                        serv_message.type = IN_NAK;
+                        strcpy(serv_message.data, "cannot send invites to yourself");
+                        serv_message.size = strlen(serv_message.data);
+                    }
+                    // Cannot send invite while not in session
+                    else if (session == false)
+                    {
+                        serv_message.type = IN_NAK;
+                        strcpy(serv_message.data, "cannot send invite while not in a session");
+                        serv_message.size = strlen(serv_message.data);
+                    }
+                    // Receiver must be online
+                    else if (online == false)
+                    {
+                        serv_message.type = IN_NAK;
+                        sprintf(serv_message.data, "user \"%s\" is not online", receiver);
+                        serv_message.size = strlen(serv_message.data);
+                    }
+                    else
+                    {
+                        // Create package
+                        serv_message.type = INVITE;
+                        serv_message.size = strlen(sender->user.session_ID);
+                        strcpy(serv_message.data, sender->user.session_ID);
+
+                        // Relay data to proper receiver
+                        curr = user_list_head;
+                        while (curr != NULL)
+                        {
+                            // Find user with matching receiver username
+                            if (strcmp(curr->username, receiver) == 0)
+                            {
+                                // Pack and send message
+                                char * packed_message = pack_message(&serv_message);
+                                if (send(curr->user.socket, packed_message, strlen(packed_message), 0) == -1)
+                                {
+                                    perror("client (INVITE): send");
+                                    exit(1);
+                                }
+                                free(packed_message);
+                                break;
+                            }
+
+                            curr = curr->next_user;
+                        }
+                    }
+
+                    if (serv_message.type == IN_NAK) 
+                    {
+                        // Pack and send message
+                        char * packed_message = pack_message(&serv_message);
+                        if (send(i, packed_message, strlen(packed_message), 0) == -1)
+                        {
+                            perror("client (IN_NAK): send");
                             exit(1);
                         }
                         free(packed_message);

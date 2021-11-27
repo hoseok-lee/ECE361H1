@@ -21,6 +21,8 @@
 #define QU_ACK 13
 #define WHISPER 14
 #define WS_NAK 15
+#define INVITE 16
+#define IN_NAK 17
 
 #define MAX_NAME 50
 #define MAX_DATA 500

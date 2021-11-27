@@ -25,6 +25,8 @@
 // Global variables
 bool logged = false;
 bool session = false;
+bool invitation = false;
+char invite_session_ID[MAX_NAME];
 
 void * receive_message (void * sockfd_void)
 {
@@ -33,6 +35,7 @@ void * receive_message (void * sockfd_void)
     while (true)
     {
         // Wait for server reply
+        fflush(stdout);
         char serv_reply[MESSAGE_MAXBUFLEN];
         int reply_len;
         if ((reply_len = recv(sockfd, serv_reply, MESSAGE_MAXBUFLEN - 1, 0)) == -1)
@@ -41,6 +44,7 @@ void * receive_message (void * sockfd_void)
             exit(1);
         }
         serv_reply[reply_len] = '\0';
+        fflush(stdout);
 
         // Unpack data
         int type = atoi(strtok(serv_reply, ":"));
@@ -80,6 +84,18 @@ void * receive_message (void * sockfd_void)
         {
             printf("Whisper message error: %s\n", data);
         }
+        else if (type == INVITE)
+        {
+            printf("Do you want to join session \"%s\"? ", data);
+
+            // Copy data for prompt
+            invitation = true;
+            strcpy(invite_session_ID, data);
+        }
+        else if (type == IN_NAK)
+        {
+            printf("Invite error: %s\n", data);
+        }
     }
 
     return NULL;
@@ -99,6 +115,28 @@ int main (int argc, char ** argv)
         // Receive user input
         char input[MESSAGE_MAXBUFLEN];
         fgets(input, MESSAGE_MAXBUFLEN, stdin);
+
+        // Check for invitation
+        if ((logged == true) && (invitation == true)) {
+            if (strcmp(input, "yes\n") == 0)
+            {
+                // Create new message struct
+                message.type = JOIN;
+                message.size = strlen(invite_session_ID);
+                strcpy(message.data, invite_session_ID);
+
+                // Send serialized message
+                char * packed_message = pack_message(&message);
+                if (send(sockfd, packed_message, strlen(packed_message), 0) == -1)
+                {
+                    perror("client: send");
+                    exit(1);
+                }
+                free(packed_message);
+
+                invitation = false;
+            }
+        }
 
         // If the user input begins with a slash to indicate a command
         if (input[0] == '/')
@@ -289,7 +327,7 @@ int main (int argc, char ** argv)
                 return 0;
             }
             // WHISPER
-            else if ((strcmp(input, "/whisper") == 0) &&  (logged == true))
+            else if ((strcmp(input, "/whisper") == 0) && (logged == true))
             {
                 // Retrieve arguments
                 char * receiver = strtok(NULL, " ");
@@ -299,6 +337,26 @@ int main (int argc, char ** argv)
                 message.type = WHISPER;
                 sprintf(message.data, "%s:%s", receiver, data);
                 message.size = strlen(message.data);
+
+                // Send serialized message
+                char * packed_message = pack_message(&message);
+                if (send(sockfd, packed_message, strlen(packed_message), 0) == -1)
+                {
+                    perror("client: send");
+                    exit(1);
+                }
+                free(packed_message);
+            }
+            // INVITE
+            else if ((strcmp(input, "/invite") == 0) && (logged == true))
+            {
+                // Retrieve arguments
+                char * receiver = strtok(NULL, "\n");
+
+                // Create new message struct
+                message.type = INVITE;
+                message.size = strlen(receiver);
+                strcpy(message.data, receiver);
 
                 // Send serialized message
                 char * packed_message = pack_message(&message);
