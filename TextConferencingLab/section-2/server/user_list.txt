@@ -1,2 +1,4 @@
 admin admin
 guest guest
+george jungle
+soju bottle
