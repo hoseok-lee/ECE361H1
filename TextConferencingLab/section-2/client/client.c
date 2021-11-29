@@ -133,9 +133,10 @@ int main (int argc, char ** argv)
                     exit(1);
                 }
                 free(packed_message);
-
-                invitation = false;
             }
+
+            // Cancel invitation whether or not receiver said "yes" or anything else
+            invitation = false;
         }
 
         // If the user input begins with a slash to indicate a command
